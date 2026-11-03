@@ -129,6 +129,29 @@ as long as ordinary PRs stay under 2 minutes.
 - It is a reusable workflow (`build.yml` with `on: workflow_call`) that the deploy workflow
   calls, so the gate and the deploy can't drift apart.
 
+## E2E
+
+Playwright is the most expensive suite per test, so it holds only what needs a real browser.
+
+- **What earns a Playwright test**: a journey across pages, layout at a breakpoint, a browser API
+  (file picker, camera, clipboard, service worker), an auth redirect, a payment or signature
+  flow, and a few smoke tests against the real API and database. A page's behaviour against a
+  mocked API is a component test (Vitest + Vue Test Utils): milliseconds instead of seconds.
+- **Budget**: the whole E2E suite stays under 5 minutes on the CI runner. Past it, move tests
+  down a layer before reaching for more machines.
+- **Against the built app** (`vite build` + `vite preview`), never the dev server. The dev server
+  serves hundreds of unbundled modules and each test's fresh browser context reloads them all:
+  the same tests ran 2.5× slower per test on it.
+- **Workers set explicitly.** Playwright defaults to half the cores, which is 1 worker on a
+  private repo's 2-vCPU runner: the suite then runs serially. Tests are isolated per browser
+  context so they can run in parallel; when a shared fake backend prevents it, start one per
+  worker.
+- **No retries.** A retry hides a flaky test and doubles the cost of a real failure.
+- **Run what the change can affect.** E2E against a mocked API only runs for the apps whose code
+  changed: the selection is exact, since nothing else reaches the browser. E2E against a real
+  backend runs when anything it exercises changed.
+- **Shard last.** Each shard pays checkout, install and browser setup again.
+
 ## Coverage
 
 Coverage is a signal, not a merge gate. Thresholds live in the full suite; a PR can show a

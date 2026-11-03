@@ -34,3 +34,12 @@ after the fact; a decision that is reversed gets a new entry.
   and a self-hosted runner adds a machine to patch and a place for untrusted code to run. They
   are reconsidered only past the thresholds in `deploy.md`. Deploys pull a tested image from
   GHCR; Dokploy never builds from source, and production gets the image staging tested.
+
+- **2026-11-03 — E2E: only what needs a browser, under 5 minutes, against the built app.** One
+  project's Playwright suite took 26 minutes for 307 tests: one worker (Playwright's default on a
+  2-vCPU private runner), the Vite dev server reloading every module in each test's fresh
+  context, about 5 seconds per test with no sleeps anywhere. Locally the same tests ran 2.5×
+  faster per test against `vite build` + `vite preview`, and 6× with 4 workers. Most of them
+  checked one page against a mocked API, which is a component test's job. Hence the rules in
+  `ci.md` § E2E: a budget, the built app, explicit workers, no retries, selection by app when the
+  API is mocked, and Playwright only for what needs a real browser.
