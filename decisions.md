@@ -43,3 +43,11 @@ after the fact; a decision that is reversed gets a new entry.
   checked one page against a mocked API, which is a component test's job. Hence the rules in
   `ci.md` § E2E: a budget, the built app, explicit workers, no retries, selection by app when the
   API is mocked, and Playwright only for what needs a real browser.
+
+- **2026-11-03 — Merges in a row share a full-suite run; stacks merge from the top.** An agent
+  that works through several issues overnight leaves several PRs, and merging them one after
+  another ran the full suite once per merge (13–15 billed minutes each on one project), most of
+  them for commits nobody would deploy. A concurrency group without `cancel-in-progress` keeps
+  one run going and one waiting, the newest; a cancelled run counts as no verdict so a red-branch
+  watcher can't be cleared by it. GitHub's stacked pull requests (generally available since
+  2026-10-06) land a whole stack in one push when its top PR is merged.

@@ -128,6 +128,18 @@ as long as ordinary PRs stay under 2 minutes.
 - The images the deploy will ship, built once (see [`deploy.md`](deploy.md)).
 - It is a reusable workflow (`build.yml` with `on: workflow_call`) that the deploy workflow
   calls, so the gate and the deploy can't drift apart.
+- **Merges in a row share a run.** One concurrency group per branch, without
+  `cancel-in-progress`: a running suite is never stopped, at most one run waits behind it, and a
+  newer push replaces the waiting one. Four merges in a row cost two suites, not four. The
+  commits in between get no verdict and can't be deployed; the newest one is what deploys anyway.
+
+  ```yaml
+  concurrency:
+    group: full-${{ github.ref }}
+    cancel-in-progress: false
+  ```
+- **A cancelled run is no verdict.** Anything that reads CI results (a deploy gate, a red-branch
+  watcher) treats a commit whose run was cancelled as untested, never as green.
 
 ## E2E
 
@@ -174,6 +186,9 @@ free. The number of runs is what drives the bill, and runs scale with pushes:
   short ones.
 - **A workflow that only needs to run for some paths says so** with `paths` / `paths-ignore`.
 - **Scheduled workflows are budgeted** like pushes: a nightly run is 30 runs a month.
+- **Merge a stack from its top PR.** With GitHub's stacked pull requests, merging the top PR
+  lands every PR below it in one push: one full-suite run. Merging them one by one runs the full
+  suite per PR, and GitHub's rebase of the PRs above reruns each of their PR checks.
 - **An agent asks before a push that starts a billed run**, and says what it costs.
 
 ## What we don't use

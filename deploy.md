@@ -34,7 +34,8 @@ push ─▶ build.yml (full suite) ─▶ detect changed services ─▶ publish
   `wait_for_deployment: "true"`**: the pipeline goes red when the deployment itself fails, not
   only when the trigger does.
 - **A publish is never cancelled half way** (no `cancel-in-progress` on deploy workflows): it
-  would leave some services on the new version and some on the old.
+  would leave some services on the new version and some on the old. A newer push replaces the
+  run still waiting instead (see [`ci.md`](ci.md#the-full-suite)).
 
 ## Build once
 
