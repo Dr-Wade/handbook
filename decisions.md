@@ -51,3 +51,32 @@ after the fact; a decision that is reversed gets a new entry.
   one run going and one waiting, the newest; a cancelled run counts as no verdict so a red-branch
   watcher can't be cleared by it. GitHub's stacked pull requests (generally available since
   2026-10-06) land a whole stack in one push when its top PR is merged.
+
+- **2026-11-04 — New projects start from a template repository, not a CLI or shared packages.**
+  Projects that started from an empty folder picked their own stack and had to be moved onto
+  this one later. Three remedies were weighed. Versioned shared packages keep apps in sync, but
+  they couple projects in different organisations and need release discipline: the one shared
+  package that existed had gone stale and was overridden in every consumer. A scaffolding CLI is
+  one more tool to maintain. A template repository (`Dr-Wade/starter`) is copied once and owned
+  by the project from then on; projects may drift, which is acceptable, and a fix found in one
+  project goes back into the starter so the next project starts with it. Its example runs through
+  every layer because an agent follows working code more faithfully than prose; a fresh agent
+  given only the starter scaffolded a project with it, and the gaps it hit were fixed in the
+  starter's notes.
+
+- **2026-11-04 — The stack moves to the current majors: Node 26, pnpm 12, TypeScript 7, NestJS 12,
+  BullMQ 6, Vitest 5, ESLint 10, Sentry 11.** Taken together in the starter rather than project by
+  project. TypeScript 7 costs three workarounds (root TypeScript 6 for typescript-eslint, a
+  `vue-tsc` shim, a hey-api snapshot), recorded in `stack.md` with the condition that removes
+  each. Prisma stays on 7: npm's `latest` tag points at an 8.0 release candidate.
+
+- **2026-11-04 — Validation through NestJS's built-in Standard Schema support.** NestJS 12 validates
+  parameters against a Zod schema given to the decorator and `@nestjs/swagger` 12 documents it,
+  so the shared Zod schemas serve the API, the OpenAPI document and the client's forms with no
+  DTO classes. class-validator would have meant a second definition of every contract, and
+  nestjs-zod no longer adds anything (and had not declared NestJS 12 support).
+
+- **2026-11-04 — PrimeVue held at 4.** PrimeVue 5 and its themes and icons moved to a commercial
+  licence with a key per project, free only below a revenue, headcount and funding threshold
+  that several projects exceed. Version 4 is MIT and what every project runs. Moving off it is a
+  choice between licensing and another component library, to be made when 4 stops being enough.

@@ -4,12 +4,19 @@ The default for a new project and the direction for existing ones. Deviate when 
 a reason, and write the reason in its README or agent notes. Versions are majors: upgrade minors
 freely, majors after reading the changelog, one major at a time.
 
+A new project starts from the [starter](https://github.com/Dr-Wade/starter) template, never from
+an empty folder: it is this page as running code, with a small example through every layer, and
+its agent notes walk through turning it into a project. When this page changes, the starter
+changes with it.
+
 ## Defining traits
 
 1. **TypeScript end to end, strict, ESM.** One language from the database schema to the browser.
 2. **Types cross the wire.** Zod schemas in a shared package are imported by the API and the
    client; the API's OpenAPI spec generates the client SDK (`@hey-api/openapi-ts`). No
-   hand-written API client.
+   hand-written API client. The API validates with NestJS's built-in Standard Schema support
+   (`@Body({ schema })`, `StandardSchemaValidationPipe`) and documents with
+   `@ApiOkResponse({ standardSchema })`: no DTO classes, no class-validator, no nestjs-zod.
 3. **One auth system, mounted once.** `better-auth` inside the API, `better-auth/vue` in the
    client, cookie sessions. Nothing in `localStorage`.
 4. **Slow work leaves the request.** OCR, mail sync, webhooks and batch jobs go through BullMQ to
@@ -23,28 +30,39 @@ freely, majors after reading the changelog, one major at a time.
 
 | Area | Choice | Major |
 |---|---|---|
-| Runtime | Node | 22 (`engines`, `.nvmrc`) |
-| Package manager | pnpm, pinned in `packageManager` | 11 |
-| Language | TypeScript, `strict`, ESM | 5.9 |
-| API | NestJS on Express | 11 |
-| Database | PostgreSQL + Prisma (`prisma-client` generator) | 16 / 7 |
-| Queues | BullMQ + Redis | 5 / 7 |
+| Runtime | Node | 26 (`engines`, `.nvmrc`) |
+| Package manager | pnpm, pinned in `packageManager` | 12 |
+| Language | TypeScript, `strict`, ESM (6.0 at the root, see below) | 7 |
+| API | NestJS on Express | 12 |
+| Database | PostgreSQL + Prisma (`prisma-client` generator, pg adapter) | 18 / 7 |
+| Queues | BullMQ + Redis, through an ioredis client | 6 / 8 |
 | Auth | better-auth | 1.7 |
 | Validation | Zod | 4 |
 | Client | Vue (Composition API, `<script setup>`) + Vite | 3.5 / 8 |
-| Routing, state | vue-router, Pinia (UI state only) | 5 / 3–4 |
+| Routing, state | vue-router, Pinia (UI state only) | 5 / 4 |
 | Server state | TanStack Query; TanStack DB when the app works offline | 5 / 0.x |
 | Styling | Tailwind via its Vite plugin (no PostCSS) | 4 |
-| Components | PrimeVue (Aura preset, `definePreset`) | 4 |
+| Components | PrimeVue (Aura preset, `definePreset`), primeicons | 4 / 7, held |
 | i18n | vue-i18n | 11 |
-| Unit tests | Vitest | 4–5 |
+| Unit tests | Vitest | 5 |
 | E2E | Playwright | 1.x |
-| Lint | ESLint flat config, [`@drwade/eslint-config`](https://github.com/Dr-Wade/eslint-config) | 9 |
-| Errors | Sentry (`@sentry/nestjs`, `@sentry/vue`); no DSN, no calls | 10 |
-| Logs | pino to stdout | 10 |
+| Lint | ESLint flat config, [`@drwade/eslint-config`](https://github.com/Dr-Wade/eslint-config) | 10 |
+| Errors | Sentry (`@sentry/nestjs`, `@sentry/vue`); no DSN, no calls | 11 |
+| Logs | pino to stdout, `nestjs-pino` in Nest | 10 |
 | Files | `@aws-sdk/client-s3` against any S3-compatible store | 3 |
 | Mail | nodemailer, behind an `isConfigured()` check | — |
 | Hosting | Docker images on Dokploy, see [`deploy.md`](deploy.md) | — |
+
+### Held back on purpose
+
+- **PrimeVue 4, `@primeuix/themes` 2, primeicons 7.** Their next majors (PrimeUI) are no longer
+  MIT: a licence key per project, free only for small organisations. Stay on the last MIT majors
+  until a project decides to license or to change library; Renovate rules keep them there.
+- **TypeScript 7 needs three workarounds**, each to drop when its tool catches up:
+  the root `typescript` stays on 6.0 because typescript-eslint loads it and supports < 6.1;
+  `vue-tsc` runs through a small script that hands it `@typescript/typescript6`, since
+  TypeScript 7 ships no JavaScript compiler to patch; `@hey-api/openapi-ts` is a `next`
+  snapshot until a stable release supports TypeScript 7.
 
 ## Layout
 
@@ -80,6 +98,15 @@ A small app drops `worker`, `queues` and `docs`. A single-tenant app drops the t
   ability factory, never per controller.
 - **Optional integrations no-op when unconfigured** (mail, Sentry, analytics): the app boots and
   its tests run with an empty environment.
+- **`@Inject(Token)` on every constructor parameter.** Vitest's transform emits no decorator
+  metadata. The API itself runs its `tsc` output, in development too: Swagger reads route
+  parameters from `design:paramtypes`, which only `tsc` emits.
+- **One Redis client per process, and a queue prefix of the project's own.** BullMQ 6 in an ES
+  module needs a client instance, which the service creates and closes on shutdown. Every queue
+  and worker passes the project's prefix: two projects on one Redis with the default `bull`
+  prefix take each other's jobs.
+- **Sentry collects no request data.** Sentry 11 sends cookies, headers and bodies unless
+  `dataCollection` turns them off; errors and stack traces are what is needed.
 
 ### Frontend
 - **Server state is not Pinia state.** Fetching, caching and invalidation go through TanStack;
