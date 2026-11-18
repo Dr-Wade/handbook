@@ -54,6 +54,43 @@ deploy workflow is next touched.
 - **Routing** is the reverse proxy's job: `<domain>/api/*` to the API, everything else to the
   client container.
 
+## Redeploying without downtime
+
+Dokploy runs each application as a Swarm service, and Swarm's default update stops the old
+container before it starts the new one. Every redeploy then drops requests for as long as the new
+container takes to boot, migrations included: 10 seconds of 502s on a small API, webhooks and
+all. Two settings close the gap, and each is useless without the other:
+
+- **The image carries a `HEALTHCHECK`** that asks the app itself whether it is ready
+  (`/api/health` for an API, the index page for a client container). Swarm sends traffic to a
+  container only once it is healthy. It is in the image, not in Dokploy, so it is versioned with
+  the code. Probe with something the image has: `node -e "fetch(…)"` in a Node image, `wget`
+  in an Alpine-based nginx one, never `curl` by default. Give it a start period that covers the
+  migrations.
+- **The Dokploy application updates start-first**: *Advanced → Swarm Settings → Update Config*,
+  `{"Parallelism": 1, "Order": "start-first", "FailureAction": "rollback", "Monitor": 30000000000}`.
+  The old container keeps serving until the new one is healthy, and a new one that never gets
+  there is rolled back instead of taking over.
+
+A health check without start-first makes the gap longer, not shorter.
+
+**The process stops when asked.** Swarm stops a container with `SIGTERM` and, 10 seconds later,
+`SIGKILL`. A process running as PID 1 has no default action for `SIGTERM`, so unless it handles
+the signal it is killed mid-request ("Exited (137)"). The entrypoint `exec`s the process
+(`sh -c "migrate && exec node dist/main.js"`, not `… && node dist/main.js`, where the shell gets
+the signal), and the app handles `SIGTERM` by closing (finishing in-flight requests and the
+current job) and then exiting. A Nest app calls `app.close()` and then `process.exit()` itself:
+Nest's `enableShutdownHooks()` re-raises the signal after closing, PID 1 ignores it, and any
+timer or open handle left (a heartbeat, a metrics exporter) keeps the process up until the
+`SIGKILL`.
+
+**Stop-first stays for what must never run twice**: databases and anything holding an exclusive
+volume, and singletons such as a sync service that keeps a cursor, a scheduler, or a bot polling
+for updates. A queue worker serves no traffic, so start-first gains it nothing; it needs the
+`SIGTERM` handling. With start-first, the old and new versions run side by side for a few
+seconds against the same database, which is one more reason migrations stay
+backward-compatible (see below).
+
 ## Rolling back
 
 Redeploy the previous image: point the application at the previous `<sha>` tag, or use

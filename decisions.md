@@ -51,3 +51,12 @@ after the fact; a decision that is reversed gets a new entry.
   one run going and one waiting, the newest; a cancelled run counts as no verdict so a red-branch
   watcher can't be cleared by it. GitHub's stacked pull requests (generally available since
   2026-10-06) land a whole stack in one push when its top PR is merged.
+
+- **2026-11-18 — Redeploys start the new container first.** A routine redeploy of one project's
+  API returned 502 for about 10 seconds, dropping webhook deliveries along with user requests.
+  An audit of 70 Dokploy applications across three servers found none set up for anything else:
+  all ran Swarm's default stop-first update, only 10 images had a health check, and the Node
+  services ignored `SIGTERM` and were killed after the grace period. HTTP services now carry a
+  `HEALTHCHECK` in the image, update start-first with rollback on failure, and exit cleanly on
+  `SIGTERM`; stateful services and singletons stay stop-first. The rules are in `deploy.md`
+  § Redeploying without downtime.
