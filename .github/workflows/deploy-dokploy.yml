@@ -1,0 +1,54 @@
+# Redeploy one Dokploy application (or compose) and wait for the result.
+# It only polls Dokploy's API, so it runs on the 1-vCPU runner (a third of the
+# price; jobs there are capped at 15 minutes).
+#
+#   deploy:
+#     needs: image
+#     if: vars.DOKPLOY_URL != ''
+#     uses: Dr-Wade/handbook/.github/workflows/deploy-dokploy.yml@workflows-v1
+#     with:
+#       dokploy-url: ${{ vars.DOKPLOY_URL }}
+#       application-id: ${{ vars.DOKPLOY_API_APP_ID }}
+#     secrets:
+#       dokploy-token: ${{ secrets.DOKPLOY_TOKEN }}
+name: Deploy to Dokploy
+
+on:
+  workflow_call:
+    inputs:
+      dokploy-url:
+        type: string
+        required: true
+      application-id:
+        description: Application id, or compose id with type compose.
+        type: string
+        required: true
+      type:
+        type: string
+        default: application
+      deployment-timeout:
+        description: Seconds to wait for the deployment to finish.
+        type: number
+        default: 600
+    secrets:
+      dokploy-token:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-slim
+    timeout-minutes: 14
+    # One deploy per app at a time, never cancelled half way (deploy.md).
+    concurrency:
+      group: dokploy-${{ inputs.application-id }}
+      cancel-in-progress: false
+    steps:
+      - uses: Dr-Wade/dokploy-deploy-action@v1
+        with:
+          dokploy_url: ${{ inputs.dokploy-url }}
+          api_key: ${{ secrets.dokploy-token }}
+          type: ${{ inputs.type }}
+          application_id: ${{ inputs.type == 'application' && inputs.application-id || '' }}
+          compose_id: ${{ inputs.type == 'compose' && inputs.application-id || '' }}
+          wait_for_deployment: "true"
+          deployment_timeout: ${{ inputs.deployment-timeout }}

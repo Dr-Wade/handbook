@@ -17,6 +17,86 @@ GitLab): a mandatory full run on every PR is the exception, not the norm.
 work is reverting or fixing forward, before any new PR merges. Revert first when one commit is
 clearly to blame and the fix is not obvious.
 
+## Who verifies a PR
+
+Atlas verifies its own PRs on its runner, where minutes cost nothing, and the PR check on GitHub
+skips a head Atlas verified. GitHub's runners do what only they can: people's PRs, and the full
+suite on the exact commit that deploys.
+
+| Change | Verified by | GitHub minutes |
+|---|---|---|
+| An Atlas PR head that passed `verify` | Atlas's runner runs `atlas.json#verify` and posts the commit status `atlas/verify` | none: the PR check skips it |
+| A person's PR, a person's push to an Atlas PR, Atlas's fix for a red GitHub check | the PR check | under 2 minutes |
+| Every merge to `develop` / `main` | the full suite | as long as it takes |
+
+- **Every repo Atlas works in has an `atlas.json`** whose `verify` lists at least what the PR check
+  runs: lint, typecheck and the unit tests. On the runner the whole unit suite is free, so list
+  it rather than the affected subset. Set `"verifySkipsPrCheck": true` and the repository
+  variable `ATLAS_BOT_LOGIN` to the bot's login.
+- **The PR check opts in with a job-level `if:`**, which bills nothing when it skips:
+  ```yaml
+  jobs:
+    check:
+      # Skip a head Atlas verified (atlas.json#verifySkipsPrCheck); unset variable = always run.
+      if: >-
+        !(github.event.pull_request.user.login == vars.ATLAS_BOT_LOGIN &&
+          contains(github.event.pull_request.body, format('atlas:verified {0}', github.event.pull_request.head.sha)))
+  ```
+  The marker names one sha, and the login test reads the PR's author, so a person's push or
+  someone else's PR always runs the check.
+- **What stays on GitHub**: image builds (the runner is a developer machine that runs agents,
+  and not amd64; see [`deploy.md`](deploy.md#runners)), people's PRs, and the full suite. Verify
+  runs on the runner's OS against the branch head; the full suite runs on Linux against the merged
+  commit, and only it gates a deploy.
+
+## Workflow files
+
+Each file does one thing. A repo's own files hold its own test commands; everything generic is a
+shared reusable workflow in this repository, pinned to the `workflows-v1` tag.
+
+| File | Trigger | Does | Never |
+|---|---|---|---|
+| `pr-check.yml` | `pull_request` | The PR check, below | builds images, deploys, measures coverage |
+| `suite.yml` | `workflow_call`, and the `full-ci` label | The full suite, below | pushes images, deploys |
+| `release.yml` | push to `develop` / `main` | Calls the others in order: `suite.yml`, then [`publish-image.yml`](.github/workflows/publish-image.yml) per changed service, then [`deploy-dokploy.yml`](.github/workflows/deploy-dokploy.yml), or [`promote-image.yml`](.github/workflows/promote-image.yml) and a deploy for production | holds test or build steps of its own |
+
+`release.yml` is the only file a push triggers. A repo whose full suite is still called
+`build.yml` renames it to `suite.yml` when its workflows are next touched: "build" reads as the
+image build.
+
+```yaml
+# release.yml, one image
+on:
+  push:
+    branches: [ main ]
+    paths-ignore: [ 'docs/**', '**/*.md' ]
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+  packages: write
+jobs:
+  suite:
+    uses: ./.github/workflows/suite.yml
+  image:
+    needs: suite
+    uses: Dr-Wade/handbook/.github/workflows/publish-image.yml@workflows-v1
+    with: { service: app, tag: latest }
+  deploy:
+    needs: image
+    if: vars.DOKPLOY_URL != ''
+    uses: Dr-Wade/handbook/.github/workflows/deploy-dokploy.yml@workflows-v1
+    with:
+      dokploy-url: ${{ vars.DOKPLOY_URL }}
+      application-id: ${{ vars.DOKPLOY_APP_ID }}
+    secrets:
+      dokploy-token: ${{ secrets.DOKPLOY_TOKEN }}
+```
+
+A repo with no tests yet still has a `suite.yml`: its typecheck and build, so that a broken build
+stops at the suite and not half way through a deploy.
+
 ## The PR check
 
 - **One job.** GitHub bills every job rounded up to a whole minute, so three 20-second jobs cost

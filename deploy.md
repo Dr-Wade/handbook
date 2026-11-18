@@ -27,8 +27,14 @@ push ─▶ build.yml (full suite) ─▶ detect changed services ─▶ publish
   imports it.
 - **Images go to GHCR** as `ghcr.io/<owner>/<repo>/<service>`, tagged with the environment and
   the commit, built with Buildx and the GHA layer cache (`cache-from: type=gha,scope=<service>`).
-- **Dokploy pulls the image**; it never builds from source on the server. Each service is one
-  Dokploy application whose source is the image's environment tag.
+- **Dokploy pulls the image**; it never builds from source on the server. A build there competes
+  with the running apps for CPU and disk, and nothing tested what it built. Each service is one
+  Dokploy application: source *Docker*, image `ghcr.io/<owner>/<repo>/<service>:<environment
+  tag>`, registry credentials of a service identity (never a person's login), and *Autodeploy*
+  off: the pipeline triggers the redeploy, Dokploy does not watch the branch.
+- **The shared workflows do the generic steps** ([`ci.md`](ci.md#workflow-files)):
+  `publish-image.yml` builds and pushes one image, `promote-image.yml` re-tags a tested one, and
+  `deploy-dokploy.yml` redeploys and waits on the 1-vCPU runner, since it only polls.
 - **The redeploy is triggered with
   [`Dr-Wade/dokploy-deploy-action`](https://github.com/Dr-Wade/dokploy-deploy-action) and
   `wait_for_deployment: "true"`**: the pipeline goes red when the deployment itself fails, not
