@@ -51,3 +51,15 @@ after the fact; a decision that is reversed gets a new entry.
   one run going and one waiting, the newest; a cancelled run counts as no verdict so a red-branch
   watcher can't be cleared by it. GitHub's stacked pull requests (generally available since
   2026-10-06) land a whole stack in one push when its top PR is merged.
+
+- **2026-11-18 — Atlas verifies its own PRs; every image is built in GitHub Actions from shared
+  workflows.** Dokploy still built 23 repositories from source on the production hosts, competing
+  with the apps for CPU (one build took 21 minutes), while GitHub-hosted builds for all of them
+  come to a few dollars a month above the free minutes. A self-hosted runner on the machine that
+  runs Atlas was ruled out: it runs agents and is not amd64. PR verification moves the other way:
+  Atlas's runner already runs each repo's `verify` commands and marks the head it verified, so the
+  PR check on GitHub skips those heads and runs only for people's PRs. Release workflows call
+  three shared reusable workflows in this public repository (publish, promote, deploy), so every
+  repo in every org builds and deploys the same way, and the deploy-wait job runs on the 1-vCPU
+  runner. The full suite on the merged commit stays on GitHub and still gates every deploy.
+
