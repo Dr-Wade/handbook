@@ -54,6 +54,54 @@ deploy workflow is next touched.
 - **Routing** is the reverse proxy's job: `<domain>/api/*` to the API, everything else to the
   client container.
 
+## Redeploying without downtime
+
+Dokploy runs each application, and each database it manages, as a Swarm service. When an app's
+*Update Config* is left empty, Dokploy deploys it **start-first** with rollback on failure: the
+new container starts, and the old one is stopped as soon as the new one is *running*. Running is
+not ready. Without a health check, the old container is stopped while the new one is still
+booting, and requests fail for as long as the boot takes, migrations included: 10 seconds of
+502s on a small API, webhooks and all.
+
+- **The image carries a `HEALTHCHECK`** that asks the app itself whether it is ready
+  (`/api/health` for an API, the index page for a client container). Swarm then waits for
+  *healthy* before stopping the old container and sends it no traffic until then. It is in the
+  image, not in Dokploy, so it is versioned with the code. Probe with something the image has:
+  `node -e "fetch(…)"` in a Node image, `wget` in an Alpine-based nginx one, never `curl` by
+  default. Give it a start period that covers the migrations.
+- **HTTP services keep start-first.** Dokploy's default already is; setting it explicitly
+  (*Advanced → Swarm Settings → Update Config*,
+  `{"Parallelism": 1, "Order": "start-first", "FailureAction": "rollback", "Monitor": 30000000000}`)
+  documents the choice. A new container that never gets healthy is rolled back instead of taking
+  over.
+
+**Anything that owns data is set to stop-first, explicitly**:
+`{"Parallelism": 1, "Order": "stop-first", "FailureAction": "pause"}`, and the same `Order` in
+*Rollback Config*. Dokploy's start-first default applies to databases, Redis, object storage and
+apps with a data volume too, so on every redeploy two processes open the same files for a few
+seconds. A Postgres data directory, a SQLite file, an AOF or a search index does not survive that
+reliably. The same goes for singletons that must never run twice: a sync service that keeps a
+cursor, a scheduler, a bot polling for updates.
+
+**A service that keeps state keeps it on a named volume.** An image that declares `VOLUME`
+(Redis, Postgres) gets an anonymous volume per container otherwise, and the next container
+starts empty. Redis for BullMQ also runs with `--appendonly yes`.
+
+**The process stops when asked.** Swarm stops a container with `SIGTERM` and, 10 seconds later,
+`SIGKILL`. A process running as PID 1 has no default action for `SIGTERM`, so unless it handles
+the signal it is killed mid-request ("Exited (137)"). The entrypoint `exec`s the process
+(`sh -c "migrate && exec node dist/main.js"`, not `… && node dist/main.js`, where the shell gets
+the signal), and the app handles `SIGTERM` by closing (finishing in-flight requests and the
+current job) and then exiting. A Nest app calls `app.close()` and then `process.exit()` itself:
+Nest's `enableShutdownHooks()` re-raises the signal after closing, PID 1 ignores it, and any
+timer or open handle left (a heartbeat, a metrics exporter) keeps the process up until the
+`SIGKILL`. Dokploy's *Command* field is split on spaces into the entrypoint, without a shell:
+`docker-entrypoint.sh redis-server --appendonly yes` keeps the image's entrypoint and PID 1;
+a leading `exec` fails.
+
+With start-first, the old and new versions of an app run side by side for a few seconds against
+the same database, which is one more reason migrations stay backward-compatible (see below).
+
 ## Rolling back
 
 Redeploy the previous image: point the application at the previous `<sha>` tag, or use
