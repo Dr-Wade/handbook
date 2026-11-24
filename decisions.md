@@ -80,3 +80,15 @@ after the fact; a decision that is reversed gets a new entry.
   licence with a key per project, free only below a revenue, headcount and funding threshold
   that several projects exceed. Version 4 is MIT and what every project runs. Moving off it is a
   choice between licensing and another component library, to be made when 4 stops being enough.
+
+- **2026-11-18 — A health check in every image; stop-first for anything that owns data.** A
+  routine redeploy of one project's API returned 502 for about 10 seconds, dropping webhook
+  deliveries along with user requests. Dokploy already deploys start-first by default, but
+  without a health check Swarm treats a container as ready the moment it starts. An audit of 70
+  Dokploy applications across three servers found only 10 images with a health check, Node
+  services that ignored `SIGTERM` and were killed after the grace period, a Redis holding BullMQ
+  queues on an anonymous volume, and every database and data volume on the start-first default,
+  so two processes shared the same files during each redeploy. HTTP services now carry a
+  `HEALTHCHECK` in the image and exit cleanly on `SIGTERM`; services that own data are set to
+  stop-first explicitly and keep it on a named volume. The rules are in `deploy.md`
+  § Redeploying without downtime.
