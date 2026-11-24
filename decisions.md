@@ -92,3 +92,22 @@ after the fact; a decision that is reversed gets a new entry.
   `HEALTHCHECK` in the image and exit cleanly on `SIGTERM`; services that own data are set to
   stop-first explicitly and keep it on a named volume. The rules are in `deploy.md`
   § Redeploying without downtime.
+
+- **2026-11-18 — Atlas verifies its own PRs; every image is built in GitHub Actions from shared
+  workflows.** Dokploy still built 23 repositories from source on the production hosts, competing
+  with the apps for CPU (one build took 21 minutes), while GitHub-hosted builds for all of them
+  come to a few dollars a month above the free minutes. A self-hosted runner on the machine that
+  runs Atlas was ruled out: it runs agents and is not amd64. PR verification moves the other way:
+  Atlas's runner already runs each repo's `verify` commands and marks the head it verified, so the
+  PR check on GitHub skips those heads and runs only for people's PRs. Release workflows call
+  three shared reusable workflows in this public repository (publish, promote, deploy), so every
+  repo in every org builds and deploys the same way, and the deploy-wait job runs on the 1-vCPU
+  runner. The full suite on the merged commit stays on GitHub and still gates every deploy.
+
+- **2026-11-24 — `atlas.json` only where there is something to verify.** Rolling `atlas.json` out
+  to every repo Atlas works in turned up repos with nothing a command could check (Grafana
+  dashboards and a compose file, a specs repo) and repos whose checks need a toolchain the runner
+  may not have (dotnet, php). An empty or near-empty `verify` adds a setup step to every run and
+  checks nothing, and a command missing on the runner is an infrastructure failure that fails the
+  run outright. The rule is now: every repo with a PR check, or with a build, typecheck or tests
+  the runner can run, has one; the rest have none until that changes.
