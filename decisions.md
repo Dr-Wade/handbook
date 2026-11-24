@@ -52,6 +52,35 @@ after the fact; a decision that is reversed gets a new entry.
   watcher can't be cleared by it. GitHub's stacked pull requests (generally available since
   2026-10-06) land a whole stack in one push when its top PR is merged.
 
+- **2026-11-04 — New projects start from a template repository, not a CLI or shared packages.**
+  Projects that started from an empty folder picked their own stack and had to be moved onto
+  this one later. Three remedies were weighed. Versioned shared packages keep apps in sync, but
+  they couple projects in different organisations and need release discipline: the one shared
+  package that existed had gone stale and was overridden in every consumer. A scaffolding CLI is
+  one more tool to maintain. A template repository (`Dr-Wade/starter`) is copied once and owned
+  by the project from then on; projects may drift, which is acceptable, and a fix found in one
+  project goes back into the starter so the next project starts with it. Its example runs through
+  every layer because an agent follows working code more faithfully than prose; a fresh agent
+  given only the starter scaffolded a project with it, and the gaps it hit were fixed in the
+  starter's notes.
+
+- **2026-11-04 — The stack moves to the current majors: Node 26, pnpm 12, TypeScript 7, NestJS 12,
+  BullMQ 6, Vitest 5, ESLint 10, Sentry 11.** Taken together in the starter rather than project by
+  project. TypeScript 7 costs three workarounds (root TypeScript 6 for typescript-eslint, a
+  `vue-tsc` shim, a hey-api snapshot), recorded in `stack.md` with the condition that removes
+  each. Prisma stays on 7: npm's `latest` tag points at an 8.0 release candidate.
+
+- **2026-11-04 — Validation through NestJS's built-in Standard Schema support.** NestJS 12 validates
+  parameters against a Zod schema given to the decorator and `@nestjs/swagger` 12 documents it,
+  so the shared Zod schemas serve the API, the OpenAPI document and the client's forms with no
+  DTO classes. class-validator would have meant a second definition of every contract, and
+  nestjs-zod no longer adds anything (and had not declared NestJS 12 support).
+
+- **2026-11-04 — PrimeVue held at 4.** PrimeVue 5 and its themes and icons moved to a commercial
+  licence with a key per project, free only below a revenue, headcount and funding threshold
+  that several projects exceed. Version 4 is MIT and what every project runs. Moving off it is a
+  choice between licensing and another component library, to be made when 4 stops being enough.
+
 - **2026-11-18 — A health check in every image; stop-first for anything that owns data.** A
   routine redeploy of one project's API returned 502 for about 10 seconds, dropping webhook
   deliveries along with user requests. Dokploy already deploys start-first by default, but
@@ -63,3 +92,22 @@ after the fact; a decision that is reversed gets a new entry.
   `HEALTHCHECK` in the image and exit cleanly on `SIGTERM`; services that own data are set to
   stop-first explicitly and keep it on a named volume. The rules are in `deploy.md`
   § Redeploying without downtime.
+
+- **2026-11-18 — Atlas verifies its own PRs; every image is built in GitHub Actions from shared
+  workflows.** Dokploy still built 23 repositories from source on the production hosts, competing
+  with the apps for CPU (one build took 21 minutes), while GitHub-hosted builds for all of them
+  come to a few dollars a month above the free minutes. A self-hosted runner on the machine that
+  runs Atlas was ruled out: it runs agents and is not amd64. PR verification moves the other way:
+  Atlas's runner already runs each repo's `verify` commands and marks the head it verified, so the
+  PR check on GitHub skips those heads and runs only for people's PRs. Release workflows call
+  three shared reusable workflows in this public repository (publish, promote, deploy), so every
+  repo in every org builds and deploys the same way, and the deploy-wait job runs on the 1-vCPU
+  runner. The full suite on the merged commit stays on GitHub and still gates every deploy.
+
+- **2026-11-24 — `atlas.json` only where there is something to verify.** Rolling `atlas.json` out
+  to every repo Atlas works in turned up repos with nothing a command could check (Grafana
+  dashboards and a compose file, a specs repo) and repos whose checks need a toolchain the runner
+  may not have (dotnet, php). An empty or near-empty `verify` adds a setup step to every run and
+  checks nothing, and a command missing on the runner is an infrastructure failure that fails the
+  run outright. The rule is now: every repo with a PR check, or with a build, typecheck or tests
+  the runner can run, has one; the rest have none until that changes.
