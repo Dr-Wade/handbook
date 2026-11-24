@@ -32,7 +32,11 @@ suite on the exact commit that deploys.
 - **Every repo Atlas works in has an `atlas.json`** whose `verify` lists at least what the PR check
   runs: lint, typecheck and the unit tests. On the runner the whole unit suite is free, so list
   it rather than the affected subset. Set `"verifySkipsPrCheck": true` and the repository
-  variable `ATLAS_BOT_LOGIN` to the bot's login.
+  variable `ATLAS_BOT_LOGIN` to the bot's login. A repo with no PR check still gets one when it
+  has something to check (a build, a typecheck, tests): `verify` is then the only check its
+  changes get before merge. A repo with nothing to check (dashboards and compose files, specs)
+  gets none, and neither does one whose checks need a tool the runner lacks: a missing command
+  fails the run instead of sending it back for a fix.
 - **The PR check opts in with a job-level `if:`**, which bills nothing when it skips:
   ```yaml
   jobs:

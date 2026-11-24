@@ -63,3 +63,10 @@ after the fact; a decision that is reversed gets a new entry.
   repo in every org builds and deploys the same way, and the deploy-wait job runs on the 1-vCPU
   runner. The full suite on the merged commit stays on GitHub and still gates every deploy.
 
+- **2026-11-24 — `atlas.json` only where there is something to verify.** Rolling `atlas.json` out
+  to every repo Atlas works in turned up repos with nothing a command could check (Grafana
+  dashboards and a compose file, a specs repo) and repos whose checks need a toolchain the runner
+  may not have (dotnet, php). An empty or near-empty `verify` adds a setup step to every run and
+  checks nothing, and a command missing on the runner is an infrastructure failure that fails the
+  run outright. The rule is now: every repo with a PR check, or with a build, typecheck or tests
+  the runner can run, has one; the rest have none until that changes.
